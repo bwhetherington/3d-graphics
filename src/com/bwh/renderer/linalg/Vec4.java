@@ -109,4 +109,10 @@ public class Vec4 {
     public void set(int i, float v) {
         ptr[i] = v;
     }
+
+    public void set(Vec4 other) {
+        for (int i = 0; i < 4; i++) {
+            ptr[i] = other.ptr[i];
+        }
+    }
 }

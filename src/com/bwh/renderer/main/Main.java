@@ -1,5 +1,7 @@
 package com.bwh.renderer.main;
 
+import com.bwh.renderer.Camera;
+import com.bwh.renderer.Mesh;
 import com.bwh.renderer.linalg.Mat4;
 import com.bwh.renderer.linalg.Vec4;
 import com.bwh.renderer.raster.Cube;
@@ -7,12 +9,16 @@ import com.bwh.renderer.raster.RasterRenderer;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
 import java.awt.image.BufferStrategy;
+import java.util.ArrayList;
+import java.util.List;
 
 import com.bwh.renderer.color.Color;
 
 public class Main {
-    private static final int WIDTH = 640, HEIGHT = 640;
+    private static final int WIDTH = 640, HEIGHT = 480;
 //    public static void main(String[] args) {
 //        Mat4 scale = Mat4.scale(2, 2, 0.5f);
 //        Mat4 trans = Mat4.translate(10, 12, 14);
@@ -43,18 +49,63 @@ public class Main {
         content.setPreferredSize(new Dimension(WIDTH, HEIGHT));
         frame.pack();
 
+        final int LEFT = 0, RIGHT = 1, UP = 2, DOWN = 3;
+        float yaw = 0;
+        float pitch = 0;
+        boolean[] keys = new boolean[4];
+
+        frame.addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyPressed(KeyEvent e) {
+                switch (e.getKeyCode()) {
+                    case KeyEvent.VK_W:
+                        keys[UP] = true;
+                        break;
+                    case KeyEvent.VK_S:
+                        keys[DOWN] = true;
+                        break;
+                    case KeyEvent.VK_A:
+                        keys[LEFT] = true;
+                        break;
+                    case KeyEvent.VK_D:
+                        keys[RIGHT] = true;
+                        break;
+                }
+            }
+
+            @Override
+            public void keyReleased(KeyEvent e) {
+                switch (e.getKeyCode()) {
+                    case KeyEvent.VK_W:
+                        keys[UP] = false;
+                        break;
+                    case KeyEvent.VK_S:
+                        keys[DOWN] = false;
+                        break;
+                    case KeyEvent.VK_A:
+                        keys[LEFT] = false;
+                        break;
+                    case KeyEvent.VK_D:
+                        keys[RIGHT] = false;
+                        break;
+                }
+            }
+        });
+
         Insets insets = frame.getInsets();
         int x = insets.left;
         int y = insets.top;
         RasterRenderer renderer = new RasterRenderer(x, y, WIDTH, HEIGHT);
 
-        Mat4 proj = Mat4.perspective((float) (Math.PI / 5), ((float) WIDTH) / HEIGHT, 0.1f, 100);
+        Mat4 proj = Mat4.perspective((float) (Math.PI / 4), ((float) WIDTH) / HEIGHT, 0.001f, 100);
 
-        var eye = new Vec4(0, 2, 3, 0);
+        var eye = new Vec4(0, 2.5f, 0, 0);
         var at = new Vec4(0, 0, 0, 0);
         var up = new Vec4(0, 1, 0, 0);
-        Mat4 view = Mat4.lookAt(eye, at, up);
 
+        var cam = new Camera();
+        cam.setPosition(eye);
+        var view = cam.getTransformation();
 
         Mat4 projView = proj.mult(view);
 
@@ -67,11 +118,6 @@ public class Main {
             return proj.mult(view).mult(model).mult(v);
         });
 
-        Vec4[] verts = new Vec4[]{
-                new Vec4(-0.5f, -0.5f, 0, 1), // should be 0 0
-                new Vec4(0.5f, -0.5f, 0, 1),  // should be 400 0
-                new Vec4(0, 0.5f, 0, 1)    // should be 200 400
-        };
         Vec4[] colors = new Vec4[]{
                 new Vec4(1, 0, 0, 0),
                 new Vec4(0, 1, 0, 0),
@@ -86,9 +132,16 @@ public class Main {
             cubeC[i] = color;
         }
 
-        renderer.setVertices(cubeV);
-        renderer.setColors(cubeC);
-        renderer.drawArrays();
+        List<Mesh> meshes = new ArrayList<>();
+
+        for (int i = -3; i <= 3; i++) {
+            for (int j = -3; j <= 3; j++) {
+                var mesh = new Mesh(cubeV, cubeC);
+                mesh.setPosition(i, 0, j);
+                meshes.add(mesh);
+            }
+
+        }
 
         frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
         frame.setLocationRelativeTo(null);
@@ -110,22 +163,43 @@ public class Main {
 
                 renderer.clear(clear);
 
-//                model.set(Mat4.rotateX((float) i));
-//                view.set(Mat4.lookAt(new Vec4(0f, (float) Math.sin(i) + 2, 3f, 0f), at, up));
-                model.set(Mat4.rotateZ((float) i));
-                renderer.drawArrays();
-                model.set(Mat4.translate(
-                        (float) (-0.2f * Math.sin(i)),
-                        (float) (-0.2f * Math.cos(i)),
-                        (float) (0.2f * Math.cos(i)))
-                        .mult(Mat4.rotateX((float) i)));
+                if (keys[LEFT]) {
+                    yaw += 0.015;
+                }
+                if (keys[RIGHT]) {
+                    yaw -= 0.015;
+                }
+                if (keys[UP]) {
+                    pitch += 0.015;
+                }
+                if (keys[DOWN]) {
+                    pitch -= 0.015;
+                }
 
+                cam.setYaw(yaw);
+                cam.setPitch(pitch);
+                view.set(cam.getTransformation());
 
-//                model.set(Mat4.rotateY((float) i));
-                renderer.drawArrays();
+                var in = 0;
+                for (var mesh : meshes) {
+                    switch (in % 3) {
+                        case 0:
+                            mesh.setYaw((float) i);
+                            break;
+                        case 1:
+                            mesh.setRoll((float) i);
+                            break;
+                        case 2:
+                            mesh.setPitch((float) i);
+                            break;
+                    }
+                    mesh.draw(model, renderer);
+                    in++;
+                }
+
                 draw(strategy, renderer);
 
-                i += 0.02 * ratio;
+                i += 0.01 * ratio;
 
 //                component.repaint();
                 stop = System.nanoTime();

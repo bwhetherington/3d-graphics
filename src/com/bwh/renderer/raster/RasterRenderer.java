@@ -43,6 +43,10 @@ public class RasterRenderer {
         viewport = scaleToPort.mult(transToTopLeft);
         depthBuffer = new float[width * height];
         bccBuffer = new float[width * height][3];
+
+        for (int i = 0; i < width * height; i++) {
+            depthBuffer[i] = Float.POSITIVE_INFINITY;
+        }
     }
 
     public RasterRenderer(int w, int h) {
@@ -93,8 +97,7 @@ public class RasterRenderer {
         }
     }
 
-    public void drawLine(double x0, double y0, double x1, double y1) {
-        int color = Color.rgb(255, 255, 255);
+    public void drawLine(double x0, double y0, double z0, double x1, double y1, double z1, Vec4 c0, Vec4 c1) {
         double error = 0;
 
         double slope = Math.abs((y1 - y0) / (x1 - x0));
@@ -116,7 +119,28 @@ public class RasterRenderer {
             int x = (int) x0;
 
             for (int y = (int) y0; y < (int) y1; y++) {
-                plot(x, y, color);
+                float u = (float) (y / y1);
+                float v = 1 - u;
+
+                Vec4 c0p = c0.mult(v);
+                Vec4 c1p = c1.mult(v);
+                Vec4 c = c0p.add(c1p);
+
+                int cr = (int) (c.get(0) * 255);
+                int cg = (int) (c.get(1) * 255);
+                int cb = (int) (c.get(2) * 255);
+
+                int color = Color.rgb(cr, cg, cb);
+
+                float depth = (float) (u * z0 + v * z1);
+
+                int depthIndex = y * width + x;
+
+                if (depth < depthBuffer[depthIndex]) {
+                    depthBuffer[depthIndex] = depth;
+                    plot(x, y, color);
+                }
+
                 error += slope;
                 if (error >= 0.5) {
                     x += xDir;
@@ -141,7 +165,27 @@ public class RasterRenderer {
             int y = (int) y0;
 
             for (int x = (int) x0; x < (int) x1; x++) {
-                plot(x, y, color);
+                float u = (float) (x / x1);
+                float v = 1 - u;
+
+                Vec4 c0p = c0.mult(u);
+                Vec4 c1p = c1.mult(v);
+                Vec4 c = c0p.add(c1p);
+
+                int cr = (int) (c.get(0) * 255);
+                int cg = (int) (c.get(1) * 255);
+                int cb = (int) (c.get(2) * 255);
+
+                int color = Color.rgb(cr, cg, cb);
+
+                float depth = (float) (u * z0 + v * z1);
+
+                int depthIndex = y * width + x;
+
+                if (depth < depthBuffer[depthIndex]) {
+                    depthBuffer[depthIndex] = depth;
+                    plot(x, y, color);
+                }
                 error += slope;
                 if (error >= 0.5) {
                     y += yDir;
@@ -160,18 +204,22 @@ public class RasterRenderer {
         this.shader = shader;
     }
 
-    void drawLine(Vec4 p0, Vec4 p1) {
-
-        int x0 = (int) p0.get(0);
-        int y0 = (int) p0.get(1);
-        int x1 = (int) p1.get(0);
-        int y1 = (int) p1.get(1);
-
-        drawLine(x0, y0, x1, y1);
-    }
+//    void drawLine(Vec4 p0, Vec4 p1) {
+//
+//        int x0 = (int) p0.get(0);
+//        int y0 = (int) p0.get(1);
+//        int x1 = (int) p1.get(0);
+//        int y1 = (int) p1.get(1);
+//
+//        drawLine(x0, y0, x1, y1);
+//    }
 
     public void setColors(Vec4[] colors) {
         this.colors = colors;
+    }
+
+    private boolean inBounds(float x, float y, float z) {
+        return x < 0 || x >= width || y < 0 || y >= height || z < 0;
     }
 
     public void drawArrays() {
@@ -184,7 +232,8 @@ public class RasterRenderer {
                     .mapToObj(i -> {
                         var v = vertices[i];
                         var tv = shader.transform(i, v, depthBuffer);
-                        return viewport.mult(tv);
+                        var p = viewport.mult(tv);
+                        return p;
                     })
                     .map(v -> {
                         var w = v.get(3);
@@ -193,44 +242,53 @@ public class RasterRenderer {
                         return newV;
                     })
                     .collect(Collectors.toList());
-//            Vec4 p0, p1, p2;
 
             IntStream.range(0, transformed.size() / 3)
                     .parallel()
                     .forEach(i -> {
-                        int ui = i * 3;
-                        int vi = ui + 1;
-                        int wi = ui + 2;
+                        var ui = i * 3;
+                        var vi = ui + 1;
+                        var wi = ui + 2;
 
                         Vec4 p0 = transformed.get(ui);
                         Vec4 p1 = transformed.get(vi);
                         Vec4 p2 = transformed.get(wi);
 
-                        float x0 = p0.get(0);
-                        float y0 = p0.get(1);
-                        float z0 = p0.get(2);
-                        float x1 = p1.get(0);
-                        float y1 = p1.get(1);
-                        float z1 = p1.get(2);
-                        float x2 = p2.get(0);
-                        float y2 = p2.get(1);
-                        float z2 = p2.get(2);
+                        var x0 = p0.get(0);
+                        var y0 = p0.get(1);
+                        var z0 = p0.get(2);
+                        var x1 = p1.get(0);
+                        var y1 = p1.get(1);
+                        var z1 = p1.get(2);
+                        var x2 = p2.get(0);
+                        var y2 = p2.get(1);
+                        var z2 = p2.get(2);
+
+//                        System.out.println("POINT");
+//                        System.out.println(p0);
+//                        System.out.println(p1);
+//                        System.out.println(p2);
+
+                        if (inBounds(x0, y0, z0) && inBounds(x1, y1, z1) && inBounds(x2, y2, z2)) {
+                            return;
+                        }
 
                         // Calculate normal
-                        float ux = x1 - x0;
-                        float uy = y1 - y0;
-                        float uz = z1 - z0;
-                        float vx = x2 - x0;
-                        float vy = y2 - y0;
-                        float vz = z2 - z0;
-                        float nz = Vec4.crossZ(ux, uy, uz, vx, vy, vz);
+                        var ux = x1 - x0;
+                        var uy = y1 - y0;
+                        var uz = z1 - z0;
+                        var vx = x2 - x0;
+                        var vy = y2 - y0;
+                        var vz = z2 - z0;
+
+                        var nz = Vec4.crossZ(ux, uy, uz, vx, vy, vz);
 
                         if (nz > 0) {
 
 
-                            Vec4 c0 = colors[i];
-                            Vec4 c1 = colors[i + 1];
-                            Vec4 c2 = colors[i + 2];
+                            var c0 = colors[i];
+                            var c1 = colors[i + 1];
+                            var c2 = colors[i + 2];
 
                             drawTriangle(
                                     x0, y0, z0,
@@ -238,50 +296,12 @@ public class RasterRenderer {
                                     x2, y2, z2,
                                     c0, c1, c2
                             );
+
+//                            drawLine(x0, y0, z0, x1, y1, z1, c0, c1);
+//                            drawLine(x1, y1, z1, x2, y2, z2, c1, c2);
+//                            drawLine(x2, y2, z2, x0, y0, z0, c2, c0);
                         }
                     });
-
-//            for (int i = 0; i < transformed.size(); i += 3) {
-//                p0 = transformed.get(i);
-//                p1 = transformed.get(i + 1);
-//                p2 = transformed.get(i + 2);
-//
-//                float x0 = p0.get(0);
-//                float y0 = p0.get(1);
-//                float z0 = p0.get(2);
-//                float x1 = p1.get(0);
-//                float y1 = p1.get(1);
-//                float z1 = p1.get(2);
-//                float x2 = p2.get(0);
-//                float y2 = p2.get(1);
-//                float z2 = p2.get(2);
-//
-//                // Calculate normal
-//                float ux = x1 - x0;
-//                float uy = y1 - y0;
-//                float uz = z1 - z0;
-//                float vx = x2 - x0;
-//                float vy = y2 - y0;
-//                float vz = z2 - z0;
-//                float nz = Vec4.crossZ(ux, uy, uz, vx, vy, vz);
-//
-//                if (nz >= 0) {
-//
-//
-//                    Vec4 c0 = colors[i];
-//                    Vec4 c1 = colors[i + 1];
-//                    Vec4 c2 = colors[i + 2];
-//
-//                    drawTriangle(
-//                            x0, y0, z0,
-//                            x1, y1, z1,
-//                            x2, y2, z2,
-//                            c0, c1, c2
-//                    );
-//                }
-//
-//
-//            }
         }
     }
 
@@ -319,16 +339,20 @@ public class RasterRenderer {
         return 0 <= x && x < width && 0 <= y && y < height;
     }
 
+    private float clamp(float val, float min, float max) {
+        return Math.min(Math.max(min, val), max);
+    }
+
     public void drawTriangle(
             float x0, float y0, float z0,
             float x1, float y1, float z1,
             float x2, float y2, float z2,
             Vec4 c0, Vec4 c1, Vec4 c2
     ) {
-        int minX = (int) Math.min(Math.min(x0, x1), x2);
-        int maxX = (int) Math.max(Math.max(x0, x1), x2);
-        int minY = (int) Math.min(Math.min(y0, y1), y2);
-        int maxY = (int) Math.max(Math.max(y0, y1), y2);
+        int minX = (int) clamp(Math.min(Math.min(x0, x1), x2), 0, width);
+        int maxX = (int) clamp(Math.max(Math.max(x0, x1), x2), 0, width);
+        int minY = (int) clamp(Math.min(Math.min(y0, y1), y2), 0, height);
+        int maxY = (int) clamp(Math.max(Math.max(y0, y1), y2), 0, height);
 
         int dx = maxX - minX;
         int dy = maxY - minY;
@@ -365,7 +389,7 @@ public class RasterRenderer {
 
                         float depth = z0 * u + z1 * v + z2 * w;
 
-                        if (inBounds(x, y) && depth < depthBuffer[i]) {
+                        if (depth > 0 && inBounds(x, y) && depth < depthBuffer[i]) {
                             depthBuffer[i] = depth;
                             plot(x, y, Color.rgb(cr, cg, cb));
                         }

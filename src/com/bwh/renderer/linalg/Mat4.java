@@ -107,13 +107,16 @@ public class Mat4 {
     public static Mat4 rotateX(float theta) {
         float c = (float) Math.cos(theta);
         float s = (float) Math.sin(theta);
-
         return new Mat4(
                 1, 0, 0, 0,
                 0, c, -s, 0,
                 0, s, c, 0,
                 0, 0, 0, 1
         );
+    }
+
+    public static Mat4 rotateX(double theta) {
+        return rotateX((float) theta);
     }
 
     public static Mat4 rotateY(float theta) {
@@ -127,6 +130,10 @@ public class Mat4 {
         );
     }
 
+    public static Mat4 rotateY(double theta) {
+        return rotateY((float) theta);
+    }
+
     public static Mat4 rotateZ(float theta) {
         final float c = (float) Math.cos(theta);
         final float s = (float) Math.sin(theta);
@@ -136,6 +143,10 @@ public class Mat4 {
                 0, 0, 1, 0,
                 0, 0, 0, 1
         );
+    }
+
+    public static Mat4 rotateZ(double theta) {
+        return rotateZ((float) theta);
     }
 
     public static Mat4 perspective(float fovY, float aspect, float near, float far) {
